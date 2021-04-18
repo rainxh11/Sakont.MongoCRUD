@@ -15,7 +15,7 @@ namespace Sakont.MongoCRUD
     {
         private readonly IMongoDatabase db;
         private readonly IMongoClient client;
-        private readonly IClientSessionHandle sessionHandle;
+        private IClientSessionHandle sessionHandle;
 
         public MongoDBProvider(string database, string replicaSetName, string host, int port, string username, string password, string clientApplicationName = null)
         {
@@ -65,6 +65,7 @@ namespace Sakont.MongoCRUD
         //-----------------------------------------------------//
         public void StartTransaction()
         {
+            sessionHandle = client.StartSession();
             sessionHandle.StartTransaction();
         }
 
@@ -158,6 +159,35 @@ namespace Sakont.MongoCRUD
             return enumerator.MoveNext();
         }
 
+        public bool WatchCollection<T>(string collectionName, out int cursor)
+        {
+            var collection = db.GetCollection<T>(collectionName);
+
+            var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<T>>().Match(x =>
+                x.OperationType == ChangeStreamOperationType.Delete ||
+                x.OperationType == ChangeStreamOperationType.Insert ||
+                x.OperationType == ChangeStreamOperationType.Update ||
+                x.OperationType == ChangeStreamOperationType.Replace
+
+            );
+
+            var changeCursor = collection.Watch(sessionHandle, pipeline);
+            cursor = new Func<int>(() =>
+            {
+                try
+                {
+                    return changeCursor.Current.Count();
+                }
+                catch
+                {
+                    return 0;
+                }
+            })();
+            var changeCursorEnumerator = changeCursor.ToEnumerable().GetEnumerator();
+
+            return changeCursorEnumerator.MoveNext();
+        }
+
         public bool WatchCollection<T>(string collectionName)
         {
             var collection = db.GetCollection<T>(collectionName);
@@ -170,8 +200,10 @@ namespace Sakont.MongoCRUD
 
             );
 
-            var changeQueueStream = collection.Watch(sessionHandle, pipeline).ToEnumerable().GetEnumerator();
-            return changeQueueStream.MoveNext();
+            var changeCursor = collection.Watch(sessionHandle, pipeline);
+            var changeCursorEnumerator = changeCursor.ToEnumerable().GetEnumerator();
+
+            return changeCursorEnumerator.MoveNext();
         }
 
         public async Task<bool> WatchCollectionAsync<T>(string collectionName)
@@ -205,6 +237,20 @@ namespace Sakont.MongoCRUD
 
             var changeQueueStream = collection.Watch(pipeline).ToEnumerable().GetEnumerator();
             return changeQueueStream.MoveNext();
+        }
+
+        public bool WatchCollection<T>(string collectionName, Expression<Func<ChangeStreamDocument<T>, bool>> filter, out int changeCount)
+        {
+            var collection = db.GetCollection<T>(collectionName);
+            var filterDefinition = Builders<ChangeStreamDocument<T>>.Filter.Where(filter);
+
+            var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<T>>().Match(filterDefinition);
+
+            var changeCursor = collection.Watch(pipeline);
+            changeCount = changeCursor.Current.Count();
+            var changeCursorEnumerator = changeCursor.ToEnumerable().GetEnumerator();
+
+            return changeCursorEnumerator.MoveNext();
         }
 
         public async Task<bool> WatchCollectionAsync<T>(string collectionName, Expression<Func<ChangeStreamDocument<T>, bool>> filter)
@@ -247,8 +293,6 @@ namespace Sakont.MongoCRUD
         }
 
         #endregion Drop Collection
-
-
 
         //-----------------------------------------------------//
 
@@ -305,20 +349,28 @@ namespace Sakont.MongoCRUD
 
         //-----------------------------------------------------//
 
-        public IMongoQueryable<T> QueryRecords<T>(string collectionName, AggregateOptions aggregateOptions = null)
+        #region Query Records
+
+        public IMongoQueryable<T> QueryRecords<T>(string collectionName)
         {
             var collection = db.GetCollection<T>(collectionName);
-            return collection.AsQueryable(aggregateOptions);
+            return collection.AsQueryable();
         }
 
-        public async Task<IMongoQueryable<T>> QueryRecordsAsync<T>(string collectionName, AggregateOptions aggregateOptions = null)
+        public async Task<IMongoQueryable<T>> QueryRecordsAsync<T>(string collectionName)
         {
             return await Task.Run<IMongoQueryable<T>>(() =>
-           {
-               var collection = db.GetCollection<T>(collectionName);
-               return collection.AsQueryable(aggregateOptions);
-           });
+            {
+                var collection = db.GetCollection<T>(collectionName);
+                return collection.AsQueryable();
+            });
         }
+
+        #endregion Query Records
+
+        //-----------------------------------------------------//
+
+        #region Query Records with filter
 
         public IMongoQueryable<T> QueryRecordsWhere<T>(string collectionName, Expression<Func<T, bool>> filter, AggregateOptions aggregateOptions = null)
         {
@@ -334,6 +386,61 @@ namespace Sakont.MongoCRUD
                 return collection.AsQueryable(aggregateOptions).Where(filter);
             });
         }
+
+        #endregion Query Records with filter
+
+        //-----------------------------------------------------//
+
+        #region Create One Index
+
+        public void CreateIndex<T>(string collectionName, string indexName, bool unique, string field)
+        {
+            var collection = db.GetCollection<T>(collectionName);
+            var cardNumberBuilder = Builders<T>.IndexKeys;
+
+            var context = new CreateIndexModel<T>(cardNumberBuilder.Ascending(field), new CreateIndexOptions()
+            {
+                Name = indexName,
+                Unique = unique
+            });
+            collection.Indexes.CreateOne(context);
+        }
+
+        public async Task CreateIndexAsync<T>(string collectionName, string indexName, bool unique, string field)
+        {
+            var collection = db.GetCollection<T>(collectionName);
+            var cardNumberBuilder = Builders<T>.IndexKeys;
+
+            var context = new CreateIndexModel<T>(cardNumberBuilder.Ascending(field), new CreateIndexOptions()
+            {
+                Name = indexName,
+                Unique = unique
+            });
+            await collection.Indexes.CreateOneAsync(context);
+        }
+
+        #endregion Create One Index
+
+        //-----------------------------------------------------//
+
+        #region Check if record exist
+
+        public bool RecordExistWhere<T>(string collectionName, Expression<Func<T, bool>> filter)
+        {
+            var collection = db.GetCollection<T>(collectionName);
+            return collection.Find(filter).Any();
+        }
+
+        public async Task<bool> RecordExistWhereAsync<T>(string collectionName, Expression<Func<T, bool>> filter)
+        {
+            var collection = db.GetCollection<T>(collectionName);
+            var exist = await collection.FindAsync(filter);
+            return exist.Any();
+        }
+
+        #endregion Check if record exist
+
+        //-----------------------------------------------------//
 
         #region Load Many Documents
 

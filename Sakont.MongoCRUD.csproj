@@ -5,11 +5,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MongoDB.Bson" Version="2.11.5" />
-    <PackageReference Include="MongoDB.Driver" Version="2.11.5" />
-    <PackageReference Include="MongoDB.Driver.Core" Version="2.11.5" />
-    <PackageReference Include="MongoDB.Libmongocrypt" Version="1.0.0" />
-    <PackageReference Include="SharpCompress" Version="0.27.1" />
+    <PackageReference Include="MongoDB.Bson" Version="2.12.1" />
+    <PackageReference Include="MongoDB.Driver" Version="2.12.1" />
+    <PackageReference Include="MongoDB.Driver.Core" Version="2.12.1" />
+    <PackageReference Include="MongoDB.Libmongocrypt" Version="1.2.1" />
+    <PackageReference Include="SharpCompress" Version="0.28.1" />
   </ItemGroup>
 
 </Project>

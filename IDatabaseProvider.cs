@@ -1,4 +1,6 @@
-﻿using System;
+﻿using MongoDB.Driver;
+using MongoDB.Driver.Linq;
+using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
@@ -7,6 +9,25 @@ namespace Sakont.MongoCRUD
 {
     public interface IDatabaseProvider
     {
+        Task AbortTransactionAsync();
+
+        Task CommitTransactionAsync();
+
+        void StartTransaction();
+
+        //-----------------------------------------------------//
+        void CreateView<TLocal, TForeign, TOutput>(string localCollection, string foreignCollection, string viewName,
+            Expression<Func<TLocal, object>> field,
+            Expression<Func<TForeign, object>> foreignField,
+            Expression<Func<TOutput, object>> outputField);
+
+        Task CreateViewAsync<TLocal, TForeign, TOutput>(string localCollection, string foreignCollection, string viewName,
+            Expression<Func<TLocal, object>> field,
+            Expression<Func<TForeign, object>> foreignField,
+            Expression<Func<TOutput, object>> outputField);
+
+        //-----------------------------------------------------//
+
         /// <summary>
         /// Drop a collection from database
         /// </summary>
@@ -22,6 +43,10 @@ namespace Sakont.MongoCRUD
         Task DropCollectionAsync(string collection);
 
         //-----------------------------------------------------//
+        Task<bool> WatchDatabaseAsync();
+
+        bool WatchDatabase();
+
         /// <summary>
         /// Watch a collection for any change
         /// </summary>
@@ -29,6 +54,8 @@ namespace Sakont.MongoCRUD
         /// <param name="collectionName">collection name</param>
         /// <returns>return true if something changed</returns>
         bool WatchCollection<T>(string collectionName);
+
+        bool WatchCollection<T>(string collectionName, out int cursor);
 
         /// <summary>
         /// Async Watch a collection for any change
@@ -54,6 +81,17 @@ namespace Sakont.MongoCRUD
         Task CreateCollectionAsync(string collection);
 
         //-----------------------------------------------------//
+        IMongoQueryable<T> QueryRecords<T>(string collectionName);
+
+        Task<IMongoQueryable<T>> QueryRecordsAsync<T>(string collectionName);
+
+        IMongoQueryable<T> QueryRecordsWhere<T>(string collectionName, Expression<Func<T, bool>> filter, AggregateOptions aggregateOptions = null);
+
+        Task<IMongoQueryable<T>> QueryRecordsWhereAsync<T>(string collectionName, Expression<Func<T, bool>> filter, AggregateOptions aggregateOptions = null);
+
+        List<T> LoadRecords<T>(string collectionName, IEnumerable<Guid> ids);
+
+        Task<List<T>> LoadRecordsAsync<T>(string collectionName, IEnumerable<Guid> ids);
 
         /// <summary>
         /// Load documents of generic type T from a collection
@@ -71,25 +109,15 @@ namespace Sakont.MongoCRUD
         /// <returns>return documents of type T</returns>
         Task<List<T>> LoadRecordsAsync<T>(string collection);
 
+        IAsyncCursor<T> LoadRecords<T>(string collectionName, int batchSize);
+
+        Task<IAsyncCursor<T>> LoadRecordsAsync<T>(string collectionName, int batchSize);
+
         //-----------------------------------------------------//
-        /// <summary>
-        /// Load documents of generic type T that satisfy a filter condition, from a collection
-        /// </summary>
-        /// <typeparam name="T">document type</typeparam>
-        /// <param name="collectionName">collection name</param>
-        /// <param name="filter">filter query</param>
-        /// <returns>return documents of type T</returns>
         T LoadRecordWhere<T>(string collectionName, Expression<Func<T, bool>> filter);
 
-        /// <summary>
-        /// Async Load documents of generic type T that satisfy a filter condition, from a collection
-        /// </summary>
-        /// <typeparam name="T">document type</typeparam>
-        /// <param name="collectionName">collection name</param>
-        /// <param name="filter">filter query</param>
-        /// <returns>return documents of type T</returns>
         Task<T> LoadRecordWhereAsync<T>(string collectionName, Expression<Func<T, bool>> filter);
-        //-----------------------------------------------------//
+
         /// <summary>
         /// Load documents of generic type T that satisfy a filter condition, from a collection
         /// </summary>
@@ -392,7 +420,7 @@ namespace Sakont.MongoCRUD
         /// <param name="collectionName"></param>
         /// <param name="ids"></param>
         /// <param name="records"></param>
-        void UpsertRecords<T>(string collectionName, IEnumerable<Guid> ids, IEnumerable<T> records);
+        void UpsertRecords<T>(string collectionName, IEnumerable<T> records, Expression<Func<T, Guid>> idFilter);
 
         /// <summary>
         ///
@@ -402,7 +430,7 @@ namespace Sakont.MongoCRUD
         /// <param name="ids"></param>
         /// <param name="records"></param>
         /// <returns></returns>
-        Task UpsertRecordsAsync<T>(string collectionName, IEnumerable<Guid> ids, IEnumerable<T> records);
+        Task UpsertRecordsAsync<T>(string collectionName, IEnumerable<T> records, Expression<Func<T, Guid>> idFilter);
 
         //-----------------------------------------------------//
         /// <summary>
